@@ -150,6 +150,14 @@ router.get("/article/promotions/", (req, res) => {
     })
 })
 
+router.get("/article/promotions/:id", (req, res) => {
+    const { id } = req.params;
+    db.query("SELECT article.*, promotions.* FROM article JOIN article_promotions ON article.article_id = article_promotions.article_id JOIN promotions ON promotions.promotion_id = article_promotions.promotion_id where article.article_id = ?",[id], (err, result) => {
+        if(err) return res.status(500).json({ message: "Erreur du chargement des articles en promotions."})
+        return res.status(200).json();
+    })
+})
+
 /**
  * ➤ ROUTE : Récupérer tous les tags des articles.
  */
@@ -167,7 +175,7 @@ router.get("/article/tags/:id", (req, res) => {
     })
 })
 
-router.get("/article/c/categorie/:id", (req, res) => {
+router.get("/article/categorie/:id", (req, res) => {
     const { id } = req.params;
     db.query("SELECT * FROM article WHERE categorie_id = ?;", [id], (err, result) => {
         if(err) return res.status(500).json({ message: "Erreur du chargement des catégories"});
@@ -178,14 +186,6 @@ router.get("/article/c/categorie/:id", (req, res) => {
 router.get("/article/categorie/count/:id", (req, res) => {
     const { id } = req.params;
     db.query("SELECT COUNT(article.article_id) AS ID FROM article WHERE categorie_id = 1;", [id], (err, result) => {
-        if(err) return res.status(500).json({ message: "Erreur du chargement des catégories"});
-        return res.status(200).json(result);
-    })
-})
-
-router.get("/article/categorie/:id", (req, res) => {
-    const { id } = req.params;
-    db.query("SELECT * FROM article WHERE categorie_id = ?;", [id], (err, result) => {
         if(err) return res.status(500).json({ message: "Erreur du chargement des catégories"});
         return res.status(200).json(result);
     })
@@ -232,13 +232,17 @@ router.get("/article/:id", (req, res) => {
 router.get("/search/:article_name", (req, res) => {
     const { article_name } = req.params;
 
-    if(article_name === null) return res.status(411).json({ message: "article_name can not be null"})
+    // Vérifiez si article_name est vide ou non défini
+    if (!article_name) {
+        return res.status(400).json({ message: "article_name cannot be null or empty" });
+    }
 
-    db.query("SELECT * FROM article WHERE article.article_name LIKE '%?%'", [article_name], (err, result) => {
-        if(err) return res.status(500).json({ message: "Erreur de la recherche d'article par nom."});
-        if(result.length < 0) return res.status(404).json({message: "Article introuvable."})
+    db.query("SELECT * FROM article WHERE article_name LIKE ?", [`%${article_name}%`], (err, result) => {
+        if (err) {
+            return res.status(500).json({ message: "Error searching for article by name." });
+        }
         return res.status(200).json(result);
-    })
-})
+    });
+});
 
 module.exports = router;
