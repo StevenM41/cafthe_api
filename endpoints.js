@@ -245,4 +245,11 @@ router.get("/search/:article_name", (req, res) => {
     });
 });
 
+router.get("/tags", (req, res) => {
+    db.query("SELECT * FROM tags", (err, result) => {
+        if(err) return res.status(500).json({ message: "Erreur lors de la récuperation des tags."});
+        return res.status(200).json(result);
+    })
+})
+
 module.exports = router;
