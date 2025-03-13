@@ -54,7 +54,6 @@ router.post("/users/login", (req, res) => {
                     nom: user.user_name,
                     prenom: user.user_prenom,
                     profile: user.profile_img,
-                    role: "admin"
                 }
             })
         })
@@ -228,28 +227,57 @@ router.get("/article/:id", (req, res) => {
     });
 });
 
-
-router.get("/search/:article_name", (req, res) => {
-    const { article_name } = req.params;
-
-    // Vérifiez si article_name est vide ou non défini
-    if (!article_name) {
-        return res.status(400).json({ message: "article_name cannot be null or empty" });
-    }
-
-    db.query("SELECT * FROM article WHERE article_name LIKE ?", [`%${article_name}%`], (err, result) => {
-        if (err) {
-            return res.status(500).json({ message: "Error searching for article by name." });
-        }
-        return res.status(200).json(result);
-    });
-});
-
 router.get("/tags", (req, res) => {
     db.query("SELECT * FROM tags", (err, result) => {
         if(err) return res.status(500).json({ message: "Erreur lors de la récuperation des tags."});
         return res.status(200).json(result);
     })
 })
+
+router.get('/filtre', (req, res) => {
+    let query = `
+        SELECT DISTINCT article.* FROM tags 
+        JOIN article_tags ON article_tags.tag_id = tags.tag_id 
+        JOIN article ON article_tags.article_id = article.article_id 
+        JOIN categories ON categories.categorie_id = article.categorie_id
+    `;
+
+    let conditions = [];
+    let values = [];
+
+    if (req.query.categorie_id) {
+        conditions.push("categories.categorie_id = ?");
+        values.push(req.query.categorie_id);
+    }
+
+    if (req.query.search) {
+        conditions.push("article.article_name LIKE ?");
+        values.push(`%${req.query.search}%`);
+    }
+
+    if(req.query.tags) {
+        conditions.push("AND tags.tag_id = ?");
+        values.push(req.query.tags);
+    }
+
+    if (req.query.price_min) {
+        conditions.push("article.article_prix > ?");
+        values.push(req.query.price_min);
+    }
+
+    if(req.query.price_max) {
+        conditions.push("article.article_prix < ?");
+        values.push(req.query.price_max);
+    }
+
+    if (conditions.length > 0) {
+        query += " WHERE " + conditions.join(" AND ");
+    }
+
+    db.query(query, values, (err, result) => {
+        if (err) return res.status(500).json({ message: "Erreur lors du chargement des tags par catégorie." });
+        res.status(200).json(result);
+    });
+});
 
 module.exports = router;
