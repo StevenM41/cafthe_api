@@ -60,7 +60,6 @@ router.post("/users/login", (req, res) => {
     })
 })
 
-
 //Creation d'un avis
 router.post('/users/avis/create', (req, res) => {
     const { avis_note, avis_coms, article_id, user_id } = req.body
@@ -198,12 +197,10 @@ router.get("/article/categorie/count/:id", (req, res) => {
 router.get("/article/:id", (req, res) => {
     const { id } = req.params;
 
-    // Vérification 1: S'assurer que l'ID est fourni
     if (!id) {
         return res.status(400).json({ message: "ID de l'article manquant" });
     }
 
-    // Vérification 2: S'assurer que l'ID est un nombre entier positif
     const articleId = parseInt(id, 10);
     if (isNaN(articleId) || articleId <= 0) {
         return res.status(400).json({ message: "ID de l'article invalide" });
@@ -211,21 +208,20 @@ router.get("/article/:id", (req, res) => {
 
     // Requête à la base de données
     db.query("SELECT * FROM article WHERE article_id = ?", [articleId], (err, result) => {
-        // Vérification 3: Gérer les erreurs de base de données
         if (err) {
             console.error("Erreur de base de données:", err);
             return res.status(500).json({ message: "Erreur serveur" });
         }
 
-        // Vérification 4: Vérifier si l'article existe
         if (result.length === 0) {
             return res.status(404).json({ message: "Article non trouvé" });
         }
 
-        // Retourner l'article trouvé
         res.json(result[0]);
     });
 });
+
+
 
 router.get("/tags", (req, res) => {
     db.query("SELECT * FROM tags", (err, result) => {
@@ -233,14 +229,19 @@ router.get("/tags", (req, res) => {
         return res.status(200).json(result);
     })
 })
+router.get("/tags/:id", (req, res) => {
+    const { id } = req.params;
+    db.query("SELECT * FROM tags where tag_id = ?",[id], (err, result) => {
+        if(err) return res.status(500).json({ message: "Erreur lors de la récuperation des tags."});
+        return res.status(200).json(result[0]);
+    })
+})
 
 router.get('/filtre', (req, res) => {
-    let query = `
-        SELECT DISTINCT article.* FROM tags 
+    let query = `SELECT DISTINCT article.* FROM tags 
         JOIN article_tags ON article_tags.tag_id = tags.tag_id 
         JOIN article ON article_tags.article_id = article.article_id 
-        JOIN categories ON categories.categorie_id = article.categorie_id
-    `;
+        JOIN categories ON categories.categorie_id = article.categorie_id`;
 
     let conditions = [];
     let values = [];
