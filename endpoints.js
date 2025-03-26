@@ -221,8 +221,6 @@ router.get("/article/:id", (req, res) => {
     });
 });
 
-
-
 router.get("/tags", (req, res) => {
     db.query("SELECT * FROM tags", (err, result) => {
         if(err) return res.status(500).json({ message: "Erreur lors de la récuperation des tags."});
@@ -238,47 +236,86 @@ router.get("/tags/:id", (req, res) => {
 })
 
 router.get('/filtre', (req, res) => {
-    let query = `SELECT DISTINCT article.* FROM tags 
-        JOIN article_tags ON article_tags.tag_id = tags.tag_id 
-        JOIN article ON article_tags.article_id = article.article_id 
-        JOIN categories ON categories.categorie_id = article.categorie_id`;
+    let query = `
+        SELECT article.*, COUNT(DISTINCT tags.tag_id) as tag_count
+        FROM article
+                 JOIN article_tags ON article.article_id = article_tags.article_id
+                 JOIN tags ON article_tags.tag_id = tags.tag_id
+                 JOIN categories ON categories.categorie_id = article.categorie_id
+            
+    `;
 
     let conditions = [];
     let values = [];
+    let havingClause = "";
 
+    // Filtre par catégorie
     if (req.query.categorie_id) {
         conditions.push("categories.categorie_id = ?");
         values.push(req.query.categorie_id);
     }
 
+    // Recherche par nom d'article
     if (req.query.search) {
         conditions.push("article.article_name LIKE ?");
         values.push(`%${req.query.search}%`);
     }
 
-    if(req.query.tags) {
-        conditions.push("AND tags.tag_id = ?");
-        values.push(req.query.tags);
-    }
-
+    // Filtre par prix min et max
     if (req.query.price_min) {
-        conditions.push("article.article_prix > ?");
+        conditions.push("article.article_prix >= ?");
         values.push(req.query.price_min);
     }
 
-    if(req.query.price_max) {
-        conditions.push("article.article_prix < ?");
+    if (req.query.price_max) {
+        conditions.push("article.article_prix <= ?");
         values.push(req.query.price_max);
     }
 
+    if(req.query.weight) {
+        conditions.push("article.article_poids >= ?");
+        values.push(req.query.weight);
+    }
+
+    // Filtre par tags (tous les tags doivent être présents)
+    if (req.query.tags) {
+        let tags = req.query.tags;
+
+        // S'assurer que tags est un tableau
+        if (!Array.isArray(tags)) {
+            tags = [tags];
+        }
+
+        // Convertir en entiers et filtrer les valeurs invalides
+        tags = tags.map(tag => parseInt(tag, 10)).filter(tag => !isNaN(tag));
+
+        if (tags.length > 0) {
+            conditions.push(`tags.tag_id IN (${tags.map(() => "?").join(", ")})`);
+            values.push(...tags);
+        } else if(tags.length > 1) {
+            conditions.push(`tags.tag_id IN (${tags.map(() => "?").join(", ")})`);
+            values.push(...tags);
+            havingClause = `HAVING COUNT(DISTINCT tags.tag_id) = ${tags.length}`;
+        }
+    }
+
+    // Ajout des conditions WHERE si nécessaire
     if (conditions.length > 0) {
         query += " WHERE " + conditions.join(" AND ");
     }
 
+    // Groupement pour éviter les doublons et appliquer le HAVING sur les tags
+    query += " GROUP BY article.article_id";
+
+    if (havingClause) {
+        query += ` ${havingClause}`;
+    }
+
     db.query(query, values, (err, result) => {
-        if (err) return res.status(500).json({ message: "Erreur lors du chargement des tags par catégorie." });
+        if (err) return res.status(500).json({ message: "Erreur lors du chargement des articles." });
         res.status(200).json(result);
     });
 });
 
 module.exports = router;
+
