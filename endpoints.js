@@ -60,16 +60,6 @@ router.post("/users/login", (req, res) => {
     })
 })
 
-//Creation d'un avis
-router.post('/users/avis/create', (req, res) => {
-    const { avis_note, avis_coms, article_id, user_id } = req.body
-    if(avis_note < 0 || avis_note > 5) {return res.status(400).json({message: "La note doit être entre 0 et 5."})}
-    db.query("INSERT INTO avis (avis_note, avis_coms, avis_creer, article_id, user_id) VALUES (?, ?, CURRENT_TIMESTAMP, ? , ?)", [avis_note, avis_coms, article_id, user_id], (err, result) => {
-        if(err) return res.status(500).json({ message: "L'importation des donnés de l'avis ont échouer.", result: err})
-        if(result) return res.status(202).json({ message: "L'importation des donnés de l'avis ont bien étais ajouté."})
-    })
-})
-
 // Création d'un achat
 router.post("/achat/create", (req, res) => {
     const { achat_quantity, article_id } = req.body;
@@ -152,7 +142,7 @@ router.get("/article/promotions/:id", (req, res) => {
     const { id } = req.params;
     db.query("SELECT article.*, promotions.* FROM article JOIN article_promotions ON article.article_id = article_promotions.article_id JOIN promotions ON promotions.promotion_id = article_promotions.promotion_id where article.article_id = ?",[id], (err, result) => {
         if(err) return res.status(500).json({ message: "Erreur du chargement des articles en promotions."})
-        return res.status(200).json();
+        return res.status(200).json(result);
     })
 })
 
@@ -241,25 +231,36 @@ router.get('/filtre', (req, res) => {
         FROM article
                  JOIN article_tags ON article.article_id = article_tags.article_id
                  JOIN tags ON article_tags.tag_id = tags.tag_id
-                 JOIN categories ON categories.categorie_id = article.categorie_id
-            
     `;
 
     let conditions = [];
     let values = [];
     let havingClause = "";
 
-    // Filtre par catégorie
-    if (req.query.categorie_id) {
-        conditions.push("categories.categorie_id = ?");
-        values.push(req.query.categorie_id);
+    // Vérifiez si `categorie_id` est 3 pour adapter les `JOIN`
+    const categorieId = req.query.categorie_id ? parseInt(req.query.categorie_id, 10) : null;
+
+    if (categorieId !== 3 && categorieId !== null) {
+        query += `
+        JOIN article_weight ON article.article_id = article_weight.article_id
+        JOIN weight ON weight.weight_id = article_weight.weight_id
+        JOIN article_boite ON article.article_id = article_boite.article_id
+        JOIN boite ON boite.boite_id = article_boite.boite_id
+        `;
     }
 
-    // Recherche par nom d'article
+    // Ajouter une condition pour `categorie_id`
+    if (categorieId) {
+        conditions.push("article.categorie_id = ?");
+        values.push(categorieId);
+    }
+
     if (req.query.search) {
         conditions.push("article.article_name LIKE ?");
         values.push(`%${req.query.search}%`);
     }
+
+    console.log("Search:", req.query.search);
 
     // Filtre par prix min et max
     if (req.query.price_min) {
@@ -272,45 +273,53 @@ router.get('/filtre', (req, res) => {
         values.push(req.query.price_max);
     }
 
-    if(req.query.weight) {
-        conditions.push("article.article_poids >= ?");
+    console.log("Prix:", req.query.price_min, req.query.price_max);
+
+    // Filtre par boîte
+    if (req.query.boites && categorieId !== 3) {
+        conditions.push("boite.boite_name = ?");
+        values.push(req.query.boites);
+    }
+
+    // Filtre par poids
+    if (req.query.weight && categorieId !== 3) {
+        conditions.push("weight.weight_name = ?");
         values.push(req.query.weight);
     }
 
-    // Filtre par tags (tous les tags doivent être présents)
+    // Filtre par tags
     if (req.query.tags) {
         let tags = req.query.tags;
 
-        // S'assurer que tags est un tableau
         if (!Array.isArray(tags)) {
             tags = [tags];
         }
 
-        // Convertir en entiers et filtrer les valeurs invalides
         tags = tags.map(tag => parseInt(tag, 10)).filter(tag => !isNaN(tag));
 
         if (tags.length > 0) {
             conditions.push(`tags.tag_id IN (${tags.map(() => "?").join(", ")})`);
             values.push(...tags);
-        } else if(tags.length > 1) {
-            conditions.push(`tags.tag_id IN (${tags.map(() => "?").join(", ")})`);
-            values.push(...tags);
+        }
+        if (tags.length > 1) {
             havingClause = `HAVING COUNT(DISTINCT tags.tag_id) = ${tags.length}`;
         }
     }
 
-    // Ajout des conditions WHERE si nécessaire
+    // Ajouter les conditions WHERE si nécessaire
     if (conditions.length > 0) {
         query += " WHERE " + conditions.join(" AND ");
     }
 
-    // Groupement pour éviter les doublons et appliquer le HAVING sur les tags
     query += " GROUP BY article.article_id";
 
     if (havingClause) {
         query += ` ${havingClause}`;
     }
 
+    console.log(query, values);
+
+    // Execution de la requête
     db.query(query, values, (err, result) => {
         if (err) return res.status(500).json({ message: "Erreur lors du chargement des articles." });
         res.status(200).json(result);

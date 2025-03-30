@@ -15,3 +15,4 @@ app.use("/api", routes);
 app.listen(3001, () => {
     console.log(`L'API est démarrée et accessible`);
 });
+
