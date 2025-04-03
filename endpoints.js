@@ -1,26 +1,38 @@
 const express = require("express");
 const db = require("./db");
 const bcrypt = require("bcrypt");
-const {verifyToken} = require("./middleware");
+const verifyToken = require("./middleware");
 const router = express.Router();
 const {sign} = require("jsonwebtoken");
 require("dotenv").config();
 
-function ERROR_500(res) {
-    return res.status(500).json({ message: "Erreur 500" });
-}
 
 //Creation d'un utilisateur
 router.post("/users/register", (req, res) => {
     const { user_name, user_prenom, user_email, user_password, user_telephone } = req.body;
     db.query("SELECT user_email FROM utilisateurs WHERE user_email = ?", [user_email], (err, result) => {
-        if (err) return ERROR_500(res);
+        if (err) return res.status(500).json({ message: "Erreur lors de l'enregistement de l'utilisateur"})
         if(result.length > 0) {return res.status(409).json({message: "L'adresse email est déja utiliser."});}
         bcrypt.hash(user_password, 10, (err, hash) => {
             if (err) return res.status(500).json( { message: "Erreur du hashage du mot de passe."})
-            db.query("INSERT INTO utilisateurs (user_name, user_prenom, user_email, user_password, user_telephone) VALUES (?, ?, ?, ?, ?)", [user_name, user_prenom, user_email, hash, user_telephone], (err, result) => {
+            db.query("INSERT INTO utilisateurs (user_name, user_prenom, user_email, user_password, user_telephone) VALUES (?, ?, ?, ?, ?)",
+                [user_name, user_prenom, user_email, hash, user_telephone], (err, result) => {
                 if (err) {return res.status(500).json({message: "Erreur lors de l'inscription."})}
-                return res.status(200).json({message: "Utilisateur enregistrer", user_id: result.insertId});
+
+                const token = sign(
+                    {id: result.insertId, email: user_email},
+                    process.env.JWT_SECRET,
+                )
+
+                res.status(200).json({
+                    message: "Utilisateur enregistrer",
+                    token,
+                    client: {
+                        id: result.insertId,
+                        nom: user_name,
+                        prenom: user_prenom,
+                    }
+                })
             });
         })
     })
@@ -43,7 +55,6 @@ router.post("/users/login", (req, res) => {
             const token = sign(
                 {id: user.user_id, email: user.user_email},
                 process.env.JWT_SECRET,
-                {expiresIn: process.env.JTW_EXPIRES_IN, }
             )
 
             res.status(200).json({
@@ -53,11 +64,24 @@ router.post("/users/login", (req, res) => {
                     id: user.user_id,
                     nom: user.user_name,
                     prenom: user.user_prenom,
-                    profile: user.profile_img,
                 }
             })
         })
     })
+})
+
+router.get('/users/:id', verifyToken, (req, res) => {
+    const { id } = req.params;
+
+    db.query('select * from utilisateurs where user_id = ?', [id], (err, result) => {
+        if(err) return res.status(500).json({message: "Erreur lors d la récupération de l'utilisateur"});
+        return res.status(200).json(result[0]);
+    })
+})
+
+router.post("/users/edit", verifyToken, (req, res) => {
+    const { user_id, user_name, user_prenom, user_email, user_password, user_telephone } = req.body;
+
 })
 
 // Création d'un achat
@@ -83,7 +107,7 @@ router.post("/achat/create", (req, res) => {
 });
 
 // Création d'un panier
-router.post("/panier/create", (req, res) => {
+router.post("/panier/create", verifyToken, (req, res) => {
     const { user_id, achat_id } = req.body;
 
     if (!user_id || !achat_id) {
@@ -124,7 +148,6 @@ router.get("/article", (req, res) => {
             console.error("Erreur lors de la récupération des articles :", err);
             return res.status(500).json({ message: "Erreur serveur" });
         }
-
         res.json(results);
     });
 });
@@ -171,14 +194,6 @@ router.get("/article/categorie/:id", (req, res) => {
     })
 })
 
-router.get("/article/categorie/count/:id", (req, res) => {
-    const { id } = req.params;
-    db.query("SELECT COUNT(article.article_id) AS ID FROM article WHERE categorie_id = 1;", [id], (err, result) => {
-        if(err) return res.status(500).json({ message: "Erreur du chargement des catégories"});
-        return res.status(200).json(result);
-    })
-})
-
 /**
  * ➤ ROUTE : Récupérer un produit par son ID
  * ➤ URL : GET /api/article/ : id
@@ -217,6 +232,7 @@ router.get("/tags", (req, res) => {
         return res.status(200).json(result);
     })
 })
+
 router.get("/tags/:id", (req, res) => {
     const { id } = req.params;
     db.query("SELECT * FROM tags where tag_id = ?",[id], (err, result) => {

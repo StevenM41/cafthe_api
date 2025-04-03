@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 
 const verifyToken = (req, res, next) => {
+
     const authHeader = req.headers["authorization"];
 
     if (!authHeader) {
@@ -16,7 +17,7 @@ const verifyToken = (req, res, next) => {
 
     jwt.verify(tokenValue, process.env.JWT_SECRET, (err, decoded) => {
         if (err) {
-            console.error("Erreur de vérification du token :", err.message);
+            console.error(`[${new Date().toISOString()}] Erreur de vérification du token :`, err.message);
             return res.status(401).json({ message: "Token invalide" });
         }
         req.user = decoded;
@@ -24,4 +25,4 @@ const verifyToken = (req, res, next) => {
     });
 };
 
-module.exports = { verifyToken };
+module.exports = verifyToken;
