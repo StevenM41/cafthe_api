@@ -6,7 +6,6 @@ const router = express.Router();
 const {sign} = require("jsonwebtoken");
 require("dotenv").config();
 
-
 //Creation d'un utilisateur
 router.post("/users/register", (req, res) => {
     const { user_name, user_prenom, user_email, user_password, user_telephone } = req.body;
@@ -79,10 +78,26 @@ router.get('/users/:id', verifyToken, (req, res) => {
     })
 })
 
-router.post("/users/edit", verifyToken, (req, res) => {
-    const { user_id, user_name, user_prenom, user_email, user_password, user_telephone } = req.body;
+router.post("/users/edit", verifyToken, async (req, res) => {
+    const { user_id, user_name, user_prenom, user_email, user_telephone } = req.body;
 
-})
+    try {
+        db.query(
+            `UPDATE utilisateurs SET user_name = ?, user_prenom = ?, user_email = ?, user_password = ?, user_telephone = ? WHERE user_id = ?`,
+            [user_name, user_prenom, user_email, user_telephone, user_id],
+            (err, result) => {
+                if (err) {
+                    console.error("Database error:", err);
+                    return res.status(500).json({ message: "Erreur lors de la modification des données utilisateur." });
+                }
+                return res.status(200).json({ message: "Modification réussie", result });
+            }
+        );
+    } catch (error) {
+        console.error("Error hashing password:", error);
+        return res.status(500).json({ message: "Erreur lors du traitement de la requête." });
+    }
+});
 
 // Création d'un achat
 router.post("/achat/create", (req, res) => {
